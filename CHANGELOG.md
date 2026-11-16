@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.4.0] - 2026-11-16
+
+### Features
+
+- add fullscreen utility for QDialog across multiple dialogs
+
+### Build & CI
+
+- release on tags instead of release-please
+- allow release scope in PR titles
+
+### Chores
+
+- release versioning hook
+
 ## [0.3.0](https://github.com/RJS138/touchstone/compare/v0.2.2...v0.3.0) (2026-03-29)
 
 
