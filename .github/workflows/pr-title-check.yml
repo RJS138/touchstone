@@ -44,5 +44,3 @@ jobs:
             build
             revert
           requireScope: false
-          disallowScopes: |
-            release
