@@ -1,0 +1,8 @@
+#!/bin/sh
+# Set the project version in pyproject.toml. Usage: .release/bump X.Y.Z
+set -eu
+v=${1:?usage: bump X.Y.Z}
+# first `version = "..."` line, which is the [project] one (it precedes every other table with a version)
+awk -v v="$v" '/^version = "/ && !d { print "version = \"" v "\""; d=1; next } { print }' pyproject.toml > pyproject.toml.new
+mv pyproject.toml.new pyproject.toml
+grep -qx "version = \"$v\"" pyproject.toml || { echo "bump: version $v not written to pyproject.toml" >&2; exit 1; }
