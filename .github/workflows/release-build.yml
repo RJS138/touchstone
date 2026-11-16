@@ -1,62 +1,22 @@
-name: Release Please + Build
+name: Release Build
 
-# Every push to main runs the release-please job (fast, ~10 seconds).
-# It maintains the open Release PR and does nothing else on normal commits.
-#
-# When the Release PR is MERGED, release-please creates the tag and GitHub
-# Release, then sets release_created=true in its outputs.  Only then do the
-# build jobs run — they are gated on that output.
-#
-# Why builds live here instead of release.yml:
-#   Tags created by GITHUB_TOKEN do not trigger push:tags workflows (GitHub
-#   security policy to prevent recursive runs).  Wiring builds as downstream
-#   jobs in this same workflow is the standard release-please pattern.
-#
-# Commit message format (Conventional Commits):
-#   feat: ...       -> minor bump  (0.1.x -> 0.2.0)
-#   fix: ...        -> patch bump  (0.1.9 -> 0.1.10)
-#   feat!: ...      -> major bump  (0.1.9 -> 1.0.0)
-#   chore/docs/...  -> no bump, still logged in changelog
-#
-# See: https://www.conventionalcommits.org/
+# Runs when the release flow pushes a v* tag (the Harness release pipeline merges
+# the release PR, tags, and pushes the tag with a PAT so this workflow fires).
+# Builds every platform from the tag and attaches the assets to the GitHub Release.
 
 on:
   push:
-    branches: [main]
-  workflow_dispatch:
+    tags: ['v*']
 
 jobs:
-  # ── Release Please ──────────────────────────────────────────────────────────
-  release-please:
-    name: Release Please
-    runs-on: ubuntu-latest
-
-    permissions:
-      contents: write       # create tags, update Release PR files
-      pull-requests: write  # open/update the Release PR
-
-    outputs:
-      release_created: ${{ steps.rp.outputs.release_created }}
-      tag_name:        ${{ steps.rp.outputs.tag_name }}
-
-    steps:
-      - uses: googleapis/release-please-action@v4
-        id: rp
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          config-file: release-please-config.json
-          manifest-file: .release-please-manifest.json
-
-  # ══════════════════════════════════════════════════════════════════════════════
-  # Build jobs — only run when release-please actually created a release.
+    # ══════════════════════════════════════════════════════════════════════════════
+  # Build jobs — one per platform, all from the pushed tag.
   # Each job stamps src/_version.py from the release tag before building.
   # ══════════════════════════════════════════════════════════════════════════════
 
   # ── Linux x86 ───────────────────────────────────────────────────────────────
   build-linux-x86:
     name: Build Linux (x86)
-    needs: release-please
-    if: needs.release-please.outputs.release_created
     # Use oldest supported Ubuntu for lowest glibc requirement (~2.35).
     runs-on: ubuntu-22.04
 
@@ -67,7 +27,7 @@ jobs:
         shell: bash
         env:
           GITHUB_REF: ${{ github.ref }}
-          INPUT_VERSION: ${{ needs.release-please.outputs.tag_name }}
+          INPUT_VERSION: ${{ github.ref_name }}
         run: python3 build/stamp_version.py
 
       - name: Install UV and patchelf
@@ -95,8 +55,6 @@ jobs:
   # ── Linux ARM ───────────────────────────────────────────────────────────────
   build-linux-arm:
     name: Build Linux (ARM)
-    needs: release-please
-    if: needs.release-please.outputs.release_created
     runs-on: ubuntu-24.04-arm
 
     steps:
@@ -106,7 +64,7 @@ jobs:
         shell: bash
         env:
           GITHUB_REF: ${{ github.ref }}
-          INPUT_VERSION: ${{ needs.release-please.outputs.tag_name }}
+          INPUT_VERSION: ${{ github.ref_name }}
         run: python3 build/stamp_version.py
 
       - name: Install UV and patchelf
@@ -134,8 +92,6 @@ jobs:
   # ── macOS Apple Silicon ─────────────────────────────────────────────────────
   build-macos-apple-silicon:
     name: Build macOS (Apple Silicon)
-    needs: release-please
-    if: needs.release-please.outputs.release_created
     runs-on: macos-14
 
     steps:
@@ -145,7 +101,7 @@ jobs:
         shell: bash
         env:
           GITHUB_REF: ${{ github.ref }}
-          INPUT_VERSION: ${{ needs.release-please.outputs.tag_name }}
+          INPUT_VERSION: ${{ github.ref_name }}
         run: python3 build/stamp_version.py
 
       - name: Install UV
@@ -172,8 +128,6 @@ jobs:
   # Intentionally not in create-release's needs: runner may be slow to pick up.
   build-macos-intel:
     name: Build macOS (Intel, self-hosted)
-    needs: release-please
-    if: needs.release-please.outputs.release_created
     runs-on: [self-hosted, macos, x86_64]
 
     steps:
@@ -183,7 +137,7 @@ jobs:
         shell: bash
         env:
           GITHUB_REF: ${{ github.ref }}
-          INPUT_VERSION: ${{ needs.release-please.outputs.tag_name }}
+          INPUT_VERSION: ${{ github.ref_name }}
         run: python3 build/stamp_version.py
 
       - name: Install UV
@@ -202,7 +156,7 @@ jobs:
       - name: Upload to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ needs.release-please.outputs.tag_name }}
+          tag_name: ${{ github.ref_name }}
           files: dist/macos/touchstone_macos_x86_64.dmg
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -210,8 +164,6 @@ jobs:
   # ── Windows x64 ─────────────────────────────────────────────────────────────
   build-windows-x64:
     name: Build Windows (x64)
-    needs: release-please
-    if: needs.release-please.outputs.release_created
     runs-on: windows-latest
 
     steps:
@@ -221,7 +173,7 @@ jobs:
         shell: bash
         env:
           GITHUB_REF: ${{ github.ref }}
-          INPUT_VERSION: ${{ needs.release-please.outputs.tag_name }}
+          INPUT_VERSION: ${{ github.ref_name }}
         run: python3 build/stamp_version.py
 
       - name: Install UV
@@ -255,8 +207,6 @@ jobs:
   # ── Windows ARM ─────────────────────────────────────────────────────────────
   build-windows-arm:
     name: Build Windows (ARM)
-    needs: release-please
-    if: needs.release-please.outputs.release_created
     runs-on: windows-11-arm
 
     steps:
@@ -266,7 +216,7 @@ jobs:
         shell: bash
         env:
           GITHUB_REF: ${{ github.ref }}
-          INPUT_VERSION: ${{ needs.release-please.outputs.tag_name }}
+          INPUT_VERSION: ${{ github.ref_name }}
         run: python3 build/stamp_version.py
 
       - name: Install UV
@@ -300,8 +250,6 @@ jobs:
   # ── Live Linux ISO ───────────────────────────────────────────────────────────
   build-live-iso:
     name: Build Live ISO (Linux x86)
-    needs: release-please
-    if: needs.release-please.outputs.release_created
     runs-on: ubuntu-latest
 
     steps:
@@ -311,7 +259,7 @@ jobs:
         shell: bash
         env:
           GITHUB_REF: ${{ github.ref }}
-          INPUT_VERSION: ${{ needs.release-please.outputs.tag_name }}
+          INPUT_VERSION: ${{ github.ref_name }}
         run: python3 build/stamp_version.py
 
       - name: Build live ISO
@@ -329,14 +277,12 @@ jobs:
   create-release:
     name: Publish Release Assets
     needs:
-      - release-please
       - build-linux-x86
       - build-linux-arm
       - build-macos-apple-silicon
       - build-windows-x64
       - build-windows-arm
       - build-live-iso
-    if: needs.release-please.outputs.release_created
 
     runs-on: ubuntu-latest
 
@@ -386,52 +332,66 @@ jobs:
             > SHA256SUMS
           cat SHA256SUMS
 
-      - name: Upload assets to GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ needs.release-please.outputs.tag_name }}
-          # release-please wrote the changelog as the release body —
-          # append_body: true adds the download table after it.
-          append_body: true
-          body: |
+      - name: Write download table
+        run: |
+          cat > downloads.md <<'DOWNLOADS'
+          ---
 
-            ---
+          ## Platform Downloads
 
-            ## Platform Downloads
+          | Platform | File |
+          |----------|------|
+          | macOS (Apple Silicon / M-series) | `touchstone_macos_arm64.dmg` |
+          | macOS (Intel — runs via Rosetta 2) | `touchstone_macos_arm64.dmg` |
+          | Linux x86 | `touchstone_linux_x86_64` |
+          | Linux ARM | `touchstone_linux_arm64` |
+          | Windows x64 | `touchstone_windows_x64.exe` |
+          | Windows ARM | `touchstone_windows_arm64.exe` |
+          | **Live Linux USB** (Ventoy bootable) | `touchstone-live.iso` |
 
-            | Platform | File |
-            |----------|------|
-            | macOS (Apple Silicon / M-series) | `touchstone_macos_arm64.dmg` |
-            | macOS (Intel — runs via Rosetta 2) | `touchstone_macos_arm64.dmg` |
-            | Linux x86 | `touchstone_linux_x86_64` |
-            | Linux ARM | `touchstone_linux_arm64` |
-            | Windows x64 | `touchstone_windows_x64.exe` |
-            | Windows ARM | `touchstone_windows_arm64.exe` |
-            | **Live Linux USB** (Ventoy bootable) | `touchstone-live.iso` |
+          ### macOS — first run
+          1. Download `touchstone_macos_arm64.dmg` and double-click to open
+          2. Right-click `Touchstone` → **Open** to bypass Gatekeeper on first launch
+          > Intel Mac users: the Apple Silicon DMG runs transparently via Rosetta 2.
 
-            ### macOS — first run
-            1. Download `touchstone_macos_arm64.dmg` and double-click to open
-            2. Right-click `Touchstone` → **Open** to bypass Gatekeeper on first launch
-            > Intel Mac users: the Apple Silicon DMG runs transparently via Rosetta 2.
+          ### Linux — first run
+          ```
+          chmod +x touchstone_linux_x86_64   # or touchstone_linux_arm64
+          sudo ./touchstone_linux_x86_64
+          ```
 
-            ### Linux — first run
-            ```
-            chmod +x touchstone_linux_x86_64   # or touchstone_linux_arm64
-            sudo ./touchstone_linux_x86_64
-            ```
+          ### Windows — first run
+          Run `touchstone_windows_x64.exe` (or `touchstone_windows_arm64.exe`) as Administrator.
 
-            ### Windows — first run
-            Run `touchstone_windows_x64.exe` (or `touchstone_windows_arm64.exe`) as Administrator.
+          ### Live Linux USB
+          Use `scripts/create_usb.sh` or `scripts/create_usb.ps1` — the ISO is downloaded automatically.
+          DOWNLOADS
 
-            ### Live Linux USB
-            Use `scripts/create_usb.sh` or `scripts/create_usb.ps1` — the ISO is downloaded automatically.
-          files: |
-            release/touchstone_macos_arm64.dmg
-            release/touchstone_linux_x86_64
-            release/touchstone_linux_arm64
-            release/touchstone_windows_x64.exe
-            release/touchstone_windows_arm64.exe
-            release/touchstone-live.iso
-            release/SHA256SUMS
+      # The release script normally creates the Release (title = tag, body =
+      # changelog) when it pushes the tag. Create it here only if that has not
+      # happened yet; otherwise keep its notes and just append the download table.
+      - name: Create release if missing, upload assets
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          if ! gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --title "$TAG" \
+              --verify-tag --notes-file downloads.md \
+              || gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null   # lost a create race
+          fi
+          gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" --clobber \
+            release/touchstone_macos_arm64.dmg \
+            release/touchstone_linux_x86_64 \
+            release/touchstone_linux_arm64 \
+            release/touchstone_windows_x64.exe \
+            release/touchstone_windows_arm64.exe \
+            release/touchstone-live.iso \
+            release/SHA256SUMS
+          # append the download table once, keeping the existing notes
+          body=$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json body --jq .body)
+          case "$body" in
+            *"## Platform Downloads"*) ;;
+            *) printf '%s\n\n' "$body" | cat - downloads.md > notes.md
+               gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --notes-file notes.md ;;
+          esac
