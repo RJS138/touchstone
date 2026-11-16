@@ -160,3 +160,7 @@ row.addWidget(btn)
 ### Manual Test Dialog Flow
 
 `TestDashboardPage._run_manual_queue()` iterates enabled manual tests in registry order and calls `_run_single_manual(entry)` for each. The dialog is created, `dialog.run()` is called (blocks), result is read from `dialog.result_str`, `TestResult` is updated, and the card is refreshed. After all manual tests complete, `_on_all_tests_done()` clears the running-all state. Individual manual tests can also be triggered by clicking a card's Run button.
+
+## Commits and releases
+
+Commits use Conventional Commits (`feat:`, `fix:`, `feat!:` …); versions and CHANGELOG.md are generated from them.
