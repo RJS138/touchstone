@@ -1,0 +1,39 @@
+# Release PR + v* tags: runs harness/release/release.sh from RJS138/infra main (same as infra's
+# reusable-release.yml, inlined because a public repo can't call a private repo's workflow).
+# GitHub-hosted runner (public repo: no self-hosted runner); PAT in repo secret RELEASE_TOKEN.
+name: release-pr
+on:
+  push: { branches: [main] }
+  workflow_dispatch:
+    inputs:
+      version: { description: "Force next version X.Y.Z (optional)", default: "" }
+permissions: { contents: read }
+concurrency: { group: release, cancel-in-progress: false }
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0, persist-credentials: false }
+      - name: release
+        env:
+          REPO: ${{ github.repository }}
+          BRANCH: main
+          VERSION: ${{ inputs.version }}
+          TOKEN: ${{ secrets.RELEASE_TOKEN }}
+        run: |
+          set -eu
+          [ -n "$TOKEN" ] || { echo "repo secret RELEASE_TOKEN is not set" >&2; exit 1; }
+          echo "::add-mask::$TOKEN"
+          # git-cliff, pinned + checksum (same version alpine 3.22 shipped to the Harness template).
+          v=2.8.0; f=git-cliff-$v-x86_64-unknown-linux-musl.tar.gz
+          curl -fsSLo "$RUNNER_TEMP/$f" "https://github.com/orhun/git-cliff/releases/download/v$v/$f"
+          echo "80c3cf621269169db9dd173c661bf64b477475fe14e10411f517061a624850a09bae3ddaa33469856b422a3b046925a8d70f1479f33cc93a90fa4edb202e5597  $RUNNER_TEMP/$f" | sha512sum -c --quiet -
+          tar -xzf "$RUNNER_TEMP/$f" -C "$RUNNER_TEMP"; export PATH="$RUNNER_TEMP/git-cliff-$v:$PATH"
+          # Token in a git http header via env config: never in a URL, never on disk.
+          export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=http.extraHeader \
+            GIT_CONFIG_VALUE_0="Authorization: Basic $(printf 'x-access-token:%s' "$TOKEN" | base64 -w0)"
+          git clone -q --depth 1 --branch main https://github.com/RJS138/infra "$RUNNER_TEMP/infra"
+          git fetch -q --tags --force origin
+          HOST=github TOKEN=$TOKEN sh "$RUNNER_TEMP/infra/harness/release/release.sh"
